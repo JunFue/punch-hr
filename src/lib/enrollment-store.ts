@@ -5,12 +5,38 @@ import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 
 const LOCAL_CODES_PATH = path.join(process.cwd(), ".enrollment-codes.json");
-const ADMIN_SEED_UUID = "20000000-0000-4000-8000-000000000001";
 
 const globalForCodes = globalThis as unknown as {
   __punchHrEnrollmentCodes?: EnrollmentCode[];
   __enrollmentTableExists?: boolean;
 };
+
+async function findFallbackAuthUserId(): Promise<string | null> {
+  const supabase = createSupabaseAdminClient();
+  if (!supabase) return null;
+
+  try {
+    const { data: adminProfile } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("role", "admin")
+      .limit(1)
+      .maybeSingle();
+
+    if (adminProfile?.id) {
+      return adminProfile.id;
+    }
+
+    const { data: usersData } = await supabase.auth.admin.listUsers({
+      page: 1,
+      perPage: 10,
+    });
+    const firstUser = usersData?.users?.[0];
+    return firstUser?.id || null;
+  } catch {
+    return null;
+  }
+}
 
 function generateShortToken(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -86,9 +112,10 @@ export async function listEnrollmentCodes(): Promise<EnrollmentCode[]> {
 
   if (isSupabaseConfigured()) {
     const supabase = createSupabaseAdminClient();
-    if (supabase) {
+    const fallbackUserId = await findFallbackAuthUserId();
+    if (supabase && fallbackUserId) {
       const { data: userRes } =
-        await supabase.auth.admin.getUserById(ADMIN_SEED_UUID);
+        await supabase.auth.admin.getUserById(fallbackUserId);
       const metaCodes = userRes?.user?.app_metadata?.enrollment_codes as
         | EnrollmentCode[]
         | undefined;
@@ -106,8 +133,9 @@ async function persistFallbackCodes(codes: EnrollmentCode[]): Promise<void> {
   writeLocalCodes(codes);
   if (isSupabaseConfigured()) {
     const supabase = createSupabaseAdminClient();
-    if (supabase) {
-      await supabase.auth.admin.updateUserById(ADMIN_SEED_UUID, {
+    const fallbackUserId = await findFallbackAuthUserId();
+    if (supabase && fallbackUserId) {
+      await supabase.auth.admin.updateUserById(fallbackUserId, {
         app_metadata: {
           enrollment_codes: codes.slice(0, 30),
         },

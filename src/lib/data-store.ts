@@ -152,9 +152,19 @@ export async function isSupabaseSchemaReady(): Promise<boolean> {
 
 export async function fetchAllSystemData(): Promise<{
   mode: "supabase" | "demo";
+  supabaseSchemaPending?: boolean;
   data: DemoDatabaseState;
 }> {
   if (isSupabaseConfigured()) {
+    const schemaReady = await isSupabaseSchemaReady();
+    if (!schemaReady) {
+      return {
+        mode: "demo",
+        supabaseSchemaPending: true,
+        data: getDemoStore(),
+      };
+    }
+
     const supabase = createSupabaseAdminClient()!;
     const [
       { data: profiles },

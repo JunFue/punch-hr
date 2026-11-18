@@ -5,7 +5,6 @@ import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 
 const LOCAL_BRANCHES_PATH = path.join(process.cwd(), ".branches.json");
-const ADMIN_SEED_UUID = "20000000-0000-4000-8000-000000000001";
 
 const globalForBranches = globalThis as unknown as {
   __punchHrBranches?: Branch[];
